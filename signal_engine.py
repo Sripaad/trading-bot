@@ -243,6 +243,62 @@ class SignalEngine:
             reason=reason
         )
     
+    def strategy_volume_breakout(self, candles: np.ndarray) -> StrategySignal:
+        """Volume-based breakout detection."""
+        closes = candles[:, 4]
+        volumes = candles[:, 5]
+        
+        if len(volumes) < 20:
+            return StrategySignal(
+                name="Volume Breakout",
+                signal=SignalType.NEUTRAL,
+                confidence=50.0,
+                indicators={},
+                reason="Not enough data"
+            )
+        
+        # Current vs average volume
+        current_vol = volumes[-1]
+        avg_vol = np.mean(volumes[-20:-1])  # Average of last 20 excluding current
+        vol_ratio = current_vol / avg_vol if avg_vol > 0 else 1.0
+        
+        # Price change
+        price_change = (closes[-1] - closes[-2]) / closes[-2] if closes[-2] > 0 else 0
+        
+        signal = SignalType.NEUTRAL
+        confidence = 50.0
+        reason = "Normal volume"
+        
+        # Volume spike with price increase = bullish breakout
+        if vol_ratio > 2.0 and price_change > 0.01:
+            signal = SignalType.STRONG_LONG
+            confidence = 75 + min(vol_ratio * 5, 20)
+            reason = f"Volume breakout UP: {vol_ratio:.1f}x avg vol, +{price_change*100:.1f}%"
+        elif vol_ratio > 1.5 and price_change > 0.005:
+            signal = SignalType.LONG
+            confidence = 60 + min(vol_ratio * 5, 20)
+            reason = f"High volume UP: {vol_ratio:.1f}x avg vol"
+        
+        # Volume spike with price decrease = bearish breakdown
+        elif vol_ratio > 2.0 and price_change < -0.01:
+            signal = SignalType.STRONG_SHORT
+            confidence = 75 + min(vol_ratio * 5, 20)
+            reason = f"Volume breakdown: {vol_ratio:.1f}x avg vol, {price_change*100:.1f}%"
+        elif vol_ratio > 1.5 and price_change < -0.005:
+            signal = SignalType.SHORT
+            confidence = 60 + min(vol_ratio * 5, 20)
+            reason = f"High volume DOWN: {vol_ratio:.1f}x avg vol"
+        
+        confidence = min(confidence, 100)
+        
+        return StrategySignal(
+            name="Volume Breakout",
+            signal=signal,
+            confidence=confidence,
+            indicators={'vol_ratio': round(vol_ratio, 2), 'price_change': round(price_change * 100, 2)},
+            reason=reason
+        )
+    
     def analyze(self, symbol: str, candles: np.ndarray) -> CompositeSignal:
         """
         Run all strategies and produce composite signal.
@@ -261,6 +317,7 @@ class SignalEngine:
             self.strategy_rsi_mean_reversion(candles),
             self.strategy_golden_cross(candles),
             self.strategy_macd(candles),
+            self.strategy_volume_breakout(candles),
         ]
         
         # Weight and combine signals
