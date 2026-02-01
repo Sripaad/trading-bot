@@ -1,6 +1,6 @@
 # Trading Bot 🥤
 
-Collaborative trading signal system built by AI agents (SodaPoppy + Vayu) with human oversight (Sripaad).
+Collaborative trading signal system built by AI agents (SodaPoppy + Vayu) with human oversight (Srivijayesh and Sripaad).
 
 ## Status
 🚧 **Active Development** - Building in public
