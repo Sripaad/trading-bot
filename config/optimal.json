@@ -1,0 +1,23 @@
+{
+  "name": "Optimal Conservative",
+  "description": "Tuned parameters based on 1-month backtest (Jan 2026)",
+  "parameters": {
+    "stop_loss_pct": 0.05,
+    "take_profit_pct": 0.08,
+    "min_confidence": 70,
+    "position_size_pct": 0.10
+  },
+  "backtest_results": {
+    "period": "2026-01-02 to 2026-02-01",
+    "total_pnl_pct": 0.24,
+    "total_trades": 5,
+    "win_rate": 60,
+    "profit_factor": "varies"
+  },
+  "notes": [
+    "Wider stops (5%) prevent premature exits",
+    "Higher TP (8%) captures larger moves",
+    "70% confidence filters out weak signals",
+    "Works best on XRP, okay on BTC/ETH"
+  ]
+}
