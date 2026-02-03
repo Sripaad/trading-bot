@@ -1,6 +1,48 @@
 {
-  "balance": 10000,
-  "positions": {},
-  "trades": [],
+  "balance": 10002.204522105487,
+  "positions": {
+    "XXBTZUSD": {
+      "entry_price": 76449.3,
+      "qty": 0.006540282252420885,
+      "side": "long",
+      "entry_time": "2026-02-01T22:01:37.308940"
+    },
+    "XETHZUSD": {
+      "entry_price": 2374.08,
+      "qty": 0.21065432761544445,
+      "side": "short",
+      "entry_time": "2026-02-02T16:09:15.227694"
+    }
+  },
+  "trades": [
+    {
+      "symbol": "XETHZUSD",
+      "side": "LONG",
+      "entry_price": 2357.96,
+      "qty": 0.2120477022510984,
+      "time": "2026-02-01T14:28:08.944603"
+    },
+    {
+      "symbol": "XXBTZUSD",
+      "side": "LONG",
+      "entry_price": 76449.3,
+      "qty": 0.006540282252420885,
+      "time": "2026-02-01T22:01:37.308961"
+    },
+    {
+      "symbol": "XETHZUSD",
+      "side": "LONG",
+      "entry_price": 2239.69,
+      "qty": 0.22268530730267944,
+      "time": "2026-02-01T23:09:04.283482"
+    },
+    {
+      "symbol": "XETHZUSD",
+      "side": "SHORT",
+      "entry_price": 2374.08,
+      "qty": 0.21065432761544445,
+      "time": "2026-02-02T16:09:15.227715"
+    }
+  ],
   "start_time": "2026-02-01T09:41:04.207250"
 }

@@ -1,137 +1,215 @@
+#!/usr/bin/env python3
 """
-Jesse Backtest Runner for Kraken
-
-This script runs backtests using Jesse's research API.
-No web dashboard needed - pure Python.
+Backtest Runner for Kraken Trading Bot
 
 Usage:
-    python backtest_runner.py
+    python backtest_runner.py --strategy GoldenCross --symbol BTC-USDT --start 2024-01-01 --end 2024-06-01
+    python backtest_runner.py --all  # Run all strategies on default config
 """
+import argparse
+import sys
+from datetime import datetime
+from typing import Dict, List, Optional
 
 import numpy as np
-from datetime import datetime, timedelta
-from jesse.research import backtest, get_candles
 
-# Import our strategies
-import sys
-sys.path.append('..')
-# from strategies.rsi_mean_reversion import RSIMeanReversion
-# from strategies.golden_cross import GoldenCross
+# Jesse imports
+from jesse.research import backtest, get_candles, import_candles
 
-
-def run_backtest():
-    """Run a basic backtest."""
-    
-    # Configuration
-    config = {
-        'starting_balance': 10_000,  # $10k starting capital
-        'fee': 0.0026,  # Kraken taker fee (0.26%)
-        'type': 'spot',  # or 'futures'
-        'futures_leverage': 1,
-        'futures_leverage_mode': 'cross',
-        'exchange': 'Kraken',
-        'warm_up_candles': 100
-    }
-    
-    # Route: which strategy on which symbol/timeframe
-    routes = [
-        {
-            'exchange': 'Kraken',
-            'strategy': 'GoldenCross',  # Our strategy class name
-            'symbol': 'BTC-USD',
-            'timeframe': '4h'
-        }
-    ]
-    
-    # Data routes: additional data feeds
-    data_routes = []
-    
-    # For now, we need to fetch/load candles
-    # This is a placeholder - real implementation needs historical data
-    print("📊 Backtest Configuration:")
-    print(f"   Starting Balance: ${config['starting_balance']:,}")
-    print(f"   Fee: {config['fee']*100}%")
-    print(f"   Exchange: {config['exchange']}")
-    print(f"   Symbol: {routes[0]['symbol']}")
-    print(f"   Timeframe: {routes[0]['timeframe']}")
-    print(f"   Strategy: {routes[0]['strategy']}")
-    print()
-    print("⚠️  To run actual backtest, need to:")
-    print("   1. Import historical candle data")
-    print("   2. Register strategy classes with Jesse")
-    print("   3. Run: result = backtest(config, routes, data_routes, candles)")
-    
-    return config, routes
+# Local imports
+from config import BACKTEST_CONFIG, DEFAULT_ROUTES, DEFAULT_DATA_ROUTES, STRATEGY_MAP
+from strategies import GoldenCross, RSIMeanReversion, MomentumROC
 
 
-def fetch_kraken_candles(symbol='XXBTZUSD', interval=240, since=None):
+def fetch_candles(
+    exchange: str,
+    symbol: str,
+    start_date: str,
+    end_date: str,
+    timeframe: str = '1h'
+) -> np.ndarray:
     """
-    Fetch historical candles from Kraken public API.
+    Fetch historical candles for backtesting.
     
     Args:
-        symbol: Kraken pair name (XXBTZUSD for BTC/USD)
-        interval: Candle interval in minutes (1, 5, 15, 30, 60, 240, 1440, 10080, 21600)
-        since: Unix timestamp to start from
+        exchange: Exchange name (e.g., 'Kraken Futures')
+        symbol: Trading pair (e.g., 'BTC-USDT')
+        start_date: Start date (YYYY-MM-DD)
+        end_date: End date (YYYY-MM-DD)
+        timeframe: Candle timeframe (e.g., '1h', '4h', '1D')
     
     Returns:
-        numpy array of candles
+        NumPy array of candles
     """
-    import requests
+    print(f"📊 Fetching candles: {exchange} {symbol} {timeframe}")
+    print(f"   Period: {start_date} to {end_date}")
     
-    url = f"https://api.kraken.com/0/public/OHLC"
-    params = {
-        'pair': symbol,
-        'interval': interval,
+    try:
+        candles = get_candles(
+            exchange=exchange,
+            symbol=symbol,
+            timeframe=timeframe,
+            start_date_str=start_date,
+            finish_date_str=end_date,
+        )
+        print(f"   ✅ Fetched {len(candles)} candles")
+        return candles
+    except Exception as e:
+        print(f"   ❌ Error fetching candles: {e}")
+        raise
+
+
+def run_backtest(
+    strategy_class,
+    config: Dict,
+    routes: List[Dict],
+    data_routes: List[Dict],
+    candles: Dict,
+    warmup_candles: Optional[Dict] = None,
+) -> Dict:
+    """
+    Run a single backtest.
+    
+    Args:
+        strategy_class: Strategy class to test
+        config: Backtest configuration
+        routes: Trading routes
+        data_routes: Additional data routes
+        candles: Candle data dictionary
+        warmup_candles: Optional warmup candles
+    
+    Returns:
+        Backtest results dictionary
+    """
+    strategy_name = strategy_class.__name__
+    print(f"\n🚀 Running backtest: {strategy_name}")
+    print(f"   Config: ${config['starting_balance']:,.0f} | Fee: {config['fee']*100:.2f}%")
+    
+    results = backtest(
+        config=config,
+        routes=routes,
+        data_routes=data_routes,
+        candles=candles,
+        warmup_candles=warmup_candles,
+        generate_equity_curve=True,
+        generate_csv=True,
+        generate_logs=True,
+    )
+    
+    return results
+
+
+def print_results(results: Dict, strategy_name: str):
+    """
+    Print formatted backtest results.
+    """
+    print(f"\n{'='*60}")
+    print(f"📈 BACKTEST RESULTS: {strategy_name}")
+    print(f"{'='*60}")
+    
+    if 'metrics' in results:
+        m = results['metrics']
+        print(f"\n💰 Performance:")
+        print(f"   Starting Balance: ${m.get('starting_balance', 0):,.2f}")
+        print(f"   Final Balance:    ${m.get('final_balance', 0):,.2f}")
+        print(f"   Total Return:     {m.get('total_return_percentage', 0):.2f}%")
+        print(f"   Annual Return:    {m.get('annual_return_percentage', 0):.2f}%")
+        
+        print(f"\n📊 Trade Statistics:")
+        print(f"   Total Trades:     {m.get('total_trades', 0)}")
+        print(f"   Win Rate:         {m.get('win_rate', 0):.1f}%")
+        print(f"   Profit Factor:    {m.get('profit_factor', 0):.2f}")
+        print(f"   Avg Win:          ${m.get('average_win', 0):,.2f}")
+        print(f"   Avg Loss:         ${m.get('average_loss', 0):,.2f}")
+        
+        print(f"\n⚠️  Risk Metrics:")
+        print(f"   Max Drawdown:     {m.get('max_drawdown_percentage', 0):.2f}%")
+        print(f"   Sharpe Ratio:     {m.get('sharpe_ratio', 0):.2f}")
+        print(f"   Sortino Ratio:    {m.get('sortino_ratio', 0):.2f}")
+    else:
+        print("   ⚠️ No metrics available in results")
+    
+    print(f"\n{'='*60}\n")
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Backtest trading strategies')
+    parser.add_argument('--strategy', type=str, choices=['GoldenCross', 'RSIMeanReversion', 'MomentumROC'],
+                        help='Strategy to backtest')
+    parser.add_argument('--all', action='store_true', help='Run all strategies')
+    parser.add_argument('--symbol', type=str, default='BTC-USDT', help='Trading pair')
+    parser.add_argument('--timeframe', type=str, default='1h', help='Candle timeframe')
+    parser.add_argument('--start', type=str, default='2024-01-01', help='Start date (YYYY-MM-DD)')
+    parser.add_argument('--end', type=str, default='2024-12-01', help='End date (YYYY-MM-DD)')
+    parser.add_argument('--balance', type=float, default=10000, help='Starting balance')
+    
+    args = parser.parse_args()
+    
+    # Validate arguments
+    if not args.strategy and not args.all:
+        parser.error("Please specify --strategy or --all")
+    
+    # Build strategy list
+    strategies = []
+    if args.all:
+        strategies = [GoldenCross, RSIMeanReversion, MomentumROC]
+    else:
+        strategy_map = {
+            'GoldenCross': GoldenCross,
+            'RSIMeanReversion': RSIMeanReversion,
+            'MomentumROC': MomentumROC,
+        }
+        strategies = [strategy_map[args.strategy]]
+    
+    # Update config
+    config = BACKTEST_CONFIG.copy()
+    config['starting_balance'] = args.balance
+    
+    # Fetch candles
+    exchange = 'Kraken Futures'
+    candle_key = f"{exchange}-{args.symbol}"
+    
+    try:
+        candle_data = fetch_candles(
+            exchange=exchange,
+            symbol=args.symbol,
+            start_date=args.start,
+            end_date=args.end,
+            timeframe=args.timeframe,
+        )
+    except Exception as e:
+        print(f"\n❌ Failed to fetch candles: {e}")
+        print("\n💡 Tip: You may need to import candles first using Jesse's import_candles function")
+        print("   Or use a different data source / exchange that has historical data available")
+        sys.exit(1)
+    
+    candles = {
+        candle_key: {
+            'exchange': exchange,
+            'symbol': args.symbol,
+            'candles': candle_data,
+        }
     }
-    if since:
-        params['since'] = since
     
-    response = requests.get(url, params=params)
-    data = response.json()
+    # Run backtests
+    for strategy_class in strategies:
+        routes = [
+            {'exchange': exchange, 'strategy': strategy_class.__name__, 
+             'symbol': args.symbol, 'timeframe': args.timeframe}
+        ]
+        
+        results = run_backtest(
+            strategy_class=strategy_class,
+            config=config,
+            routes=routes,
+            data_routes=[],
+            candles=candles,
+        )
+        
+        print_results(results, strategy_class.__name__)
     
-    if data.get('error'):
-        print(f"❌ Kraken API Error: {data['error']}")
-        return None
-    
-    # Kraken returns: [time, open, high, low, close, vwap, volume, count]
-    result = data['result']
-    pair_key = [k for k in result.keys() if k != 'last'][0]
-    candles = result[pair_key]
-    
-    # Convert to Jesse format: [timestamp, open, close, high, low, volume]
-    jesse_candles = []
-    for c in candles:
-        jesse_candles.append([
-            int(c[0]) * 1000,  # timestamp in ms
-            float(c[1]),       # open
-            float(c[4]),       # close
-            float(c[2]),       # high
-            float(c[3]),       # low
-            float(c[6])        # volume
-        ])
-    
-    return np.array(jesse_candles)
+    print("✅ Backtesting complete!")
 
 
 if __name__ == '__main__':
-    print("🚀 Jesse Trading Bot - Kraken Backtester")
-    print("=" * 50)
-    print()
-    
-    # Run config check
-    config, routes = run_backtest()
-    
-    print()
-    print("📥 Fetching sample candles from Kraken...")
-    candles = fetch_kraken_candles('XXBTZUSD', interval=240)  # 4h candles
-    
-    if candles is not None:
-        print(f"✅ Fetched {len(candles)} candles")
-        print(f"   Date range: {datetime.fromtimestamp(candles[0][0]/1000)} to {datetime.fromtimestamp(candles[-1][0]/1000)}")
-        print(f"   Latest close: ${candles[-1][2]:,.2f}")
-    
-    print()
-    print("📝 Next steps:")
-    print("   1. Register strategies with Jesse")
-    print("   2. Run full backtest with historical data")
-    print("   3. Analyze results and optimize")
+    main()
